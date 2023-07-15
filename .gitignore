@@ -3,3 +3,7 @@ __pycache__/
 logs
 runs
 samples*/
+tools/
+tmp/
+data/
+.idea/

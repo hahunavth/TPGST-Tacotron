@@ -7,9 +7,10 @@ import glob, re
 import utils
 import codecs, unicodedata
 from config import ConfigArgs as args
-import jamo
+from text import _id_to_symbol, _symbol_to_id
 
-class SpeechDataset(Dataset):
+
+class VLSPSpeechDataset(Dataset):
     """
     Basic Speech Dataset
 
@@ -18,26 +19,24 @@ class SpeechDataset(Dataset):
     :param mem_mode: Boolean. whether loads into memory
 
     """
-    def __init__(
-            self, data_path, metadata,
-            mem_mode=False, training=True, training_ratio=0.99,
-    ):
+
+    def __init__(self, data_path, metadata, mem_mode=False, training=True, training_ratio=0.99):
         self.data_path = data_path
         self.mem_mode = mem_mode
         meta = read_meta(os.path.join(data_path, metadata))
         n_rows = len(meta)
         np.random.seed(0)
-        train_indices = np.random.choice(range(n_rows), int(n_rows*training_ratio), replace=False)
-        
+        train_indices = np.random.choice(range(n_rows), int(n_rows * training_ratio), replace=False)
+
         meta = meta[~meta.index.isin(train_indices)] if not training else meta[meta.index.isin(train_indices)]
         self.fpaths, self.texts = [], []
-        ch2idx, _ = load_vocab()
-        meta.expanded = 'P' + meta.expanded + 'E'
-        for fpath, text in zip(meta.fpath.values, meta.expanded.values):
-            t = np.array([ch2idx[ch] for ch in jamo.h2j(text)])
-            f = os.path.join(data_path, args.mel_dir, os.path.basename(fpath).replace('wav', 'npy'))
+        _symbol_to_id, _ = load_vocab()
+        for fpath, text in zip(meta.id.values, meta.phoneme.values):
+            text = text.lstrip("{").rstrip("}").split(" ")
+            t = np.array([_symbol_to_id[ch] for ch in text])
+            f = os.path.join(data_path, args.mel_dir, f"mel-{os.path.basename(fpath).replace('wav', 'npy')}")
             self.texts.append(t)
-            self.fpaths.append(f)
+            self.fpaths.append(f"{f}.npy")
         if self.mem_mode:
             self.mels = [torch.tensor(np.load(os.path.join(
                 self.data_path, args.mel_dir, path))) for path in self.fpaths]
@@ -50,11 +49,13 @@ class SpeechDataset(Dataset):
             mel = torch.tensor(np.load(self.fpaths[idx]))
         else:
             mel = self.mels[idx]
-        mel = mel.view(-1, args.n_mels*args.r)
+        # print(mel.shape)
+        mel = mel.view(-1, args.n_mels * args.r)
         return text, mel
 
     def __len__(self):
         return len(self.fpaths)
+
 
 def load_vocab():
     """
@@ -65,9 +66,8 @@ def load_vocab():
         :idx2char: Dictionary containing indexes as keys and corresponding characters as values
 
     """
-    char2idx = {char: idx for idx, char in enumerate(args.vocab)}
-    idx2char = {idx: char for idx, char in enumerate(args.vocab)}
-    return char2idx, idx2char
+    return _symbol_to_id, _id_to_symbol
+
 
 def text_normalize(text):
     """
@@ -77,7 +77,7 @@ def text_normalize(text):
 
     Returns:
         text: Normalized text
-    
+
     """
     text = ''.join(char for char in unicodedata.normalize('NFD', text)
                    if unicodedata.category(char) != 'Mn')  # Strip accents
@@ -86,11 +86,12 @@ def text_normalize(text):
     text = re.sub("[ ]+", " ", text)
     return text
 
+
 def read_meta(meta_path):
     # Parse
-    meta = pd.read_table(meta_path, sep='|', header=None)
-    meta.columns = ['fpath', 'ori', 'expanded', 'decomposed', 'duration', 'en']
+    meta = pd.read_csv(meta_path, sep='|', names=['id', 'phoneme', 'text', 'label'], dtype={"id": str})
     return meta
+
 
 def collate_fn(data):
     """
@@ -103,8 +104,8 @@ def collate_fn(data):
         :mels_pads: torch tensor of shape (batch_size, padded_length, n_mels).
         :mels_pads: torch tensor of shape (batch_size, padded_length, n_mags).
         :ff_pads: torch tensor of shape (batch_size, padded_langth, 1)
-        :spks: torch tensor of shape (batch_size) 
-    
+        :spks: torch tensor of shape (batch_size)
+
     """
     # Sort a data list by text length (descending order).
     # data.sort(key=lambda x: len(x[0]), reverse=True)
@@ -123,10 +124,11 @@ def collate_fn(data):
         text_pads[idx, :text_end] = texts[idx]
         mel_end = mel_lengths[idx]
         mel_pads[idx, :mel_end] = mels[idx]
-        ff_pads[idx, mel_end-1:] = 1.0
+        ff_pads[idx, mel_end - 1:] = 1.0
     return text_pads, mel_pads, ff_pads
 
-class TextDataset(Dataset):
+
+class VLSPTextDataset(Dataset):
     """
     Text Dataset for synthesis
 
@@ -134,8 +136,15 @@ class TextDataset(Dataset):
     :param ref_path: String. {<ref_path>, 'seen', 'unseen'}
 
     """
-    def __init__(self, text_path, ref_path=None):
-        self.texts = read_hangul(text_path)
+
+    def __init__(self, text_path):
+        self.texts = []
+        meta = read_meta(text_path)
+
+        for text in meta.phoneme.values:
+            text = text.lstrip("{").rstrip("}").split(" ")
+            t = np.array([_symbol_to_id[ch] for ch in text])
+            self.texts.append(t)
 
     def __getitem__(self, idx):
         text = torch.tensor(self.texts[idx], dtype=torch.long)
@@ -143,6 +152,7 @@ class TextDataset(Dataset):
 
     def __len__(self):
         return len(self.texts)
+
 
 def read_text(path):
     """
@@ -163,24 +173,6 @@ def read_text(path):
         texts.append(text)
     return texts
 
-def read_hangul(path):
-    """
-    If we use pandas instead of this function, it may not cover quotes.
-
-    :param path: String. metadata path
-
-    Returns:
-        texts: list of normalized texts
-
-    """
-    ch2idx, _ = load_vocab()
-    lines = codecs.open(path, 'r', 'utf-8').readlines()
-    texts = []
-    for line in lines:
-        hangul = 'P' + jamo.h2j(text_normalize(line).strip()) + 'E'
-        t = np.array([ch2idx[ch] for ch in hangul])
-        texts.append(t)
-    return texts
 
 def load_ref(path):
     """
@@ -198,6 +190,7 @@ def load_ref(path):
         mel, _ = utils.load_spectrogram(fpath)
         refs.append(mel)
     return refs
+
 
 def synth_collate_fn(data):
     """
@@ -228,6 +221,7 @@ def synth_collate_fn(data):
     spks = torch.stack(spks, 0).squeeze(1) if spks is not None else None
     return text_pads, mel_pads, None, spks
 
+
 def text_collate_fn(data):
     """
     Creates mini-batch tensors from the list of tuples (texts,).
@@ -236,7 +230,7 @@ def text_collate_fn(data):
 
     Returns:
         text_pads: torch tensor of shape (batch_size, padded_length).
-    
+
     """
     # data.sort(key=lambda x: len(x[0]), reverse=True)
     texts, _ = zip(*data)

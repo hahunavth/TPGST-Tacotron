@@ -5,10 +5,10 @@ class ConfigArgs:
     See the comments in this code
 
     """
-    data_path = './data/processed_vlsp_data_phoneme_level' # DEFAULT '../../data/kss'
+    data_path = '../../data/kss'
     mel_dir, mag_dir = 'mels', 'mags'
-    meta = "train.txt" # 'transcript.v.1.4.txt' # DEFAULT 'transcript.v.1.3.txt'
-    testset = 'test.txt'
+    meta = 'transcript.v.1.3.txt'
+    testset = 'ko_sents.txt'
     logdir = 'logs' # log directory
     sampledir = 'samples' # directory where samples are located
     mem_mode = False # load all of the mel spectrograms into memory
@@ -16,7 +16,7 @@ class ConfigArgs:
     log_term = 300 # log every n-th step
     eval_term = 1000 # log every n-th step
     synth_wav = False # whether it synthesizes waveform
-    save_term = 10 # DEFAULT 2000 # save every n-th step
+    save_term = 2000 # save every n-th step
     n_workers = 4 # number of subprocesses to use for data loading
     global_step = 0 # global step
 
@@ -31,7 +31,7 @@ class ConfigArgs:
 
     batch_size = 32 # for training
     test_batch = 16 # for test
-    max_step = 1000 # 400000 # maximum training step
+    max_step = 400000 # maximum training step
     lr = 0.001 # learning rate
     warm_up_steps = 4000.0 # warm up learning rate
     # lr_decay_step = 50000 # actually not decayed per this step
@@ -50,5 +50,3 @@ class ConfigArgs:
     JAMO_VOWELS = ''.join([chr(_) for _ in range(0x1161, 0x1176)])
     JAMO_TAILS = ''.join([chr(_) for _ in range(0x11A8, 0x11C3)])
     vocab = 'PE !,.?' + JAMO_LEADS + JAMO_VOWELS + JAMO_TAILS
-
-    ref_path = "unseen" # seen or unseen
