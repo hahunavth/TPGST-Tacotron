@@ -46,9 +46,11 @@ class ConfigArgs:
     max_Tx = 188 # maximum length of text
     max_Ty = 250 # maximum length of audio
 
-    JAMO_LEADS = ''.join([chr(_) for _ in range(0x1100, 0x1113)])
-    JAMO_VOWELS = ''.join([chr(_) for _ in range(0x1161, 0x1176)])
-    JAMO_TAILS = ''.join([chr(_) for _ in range(0x11A8, 0x11C3)])
-    vocab = 'PE !,.?' + JAMO_LEADS + JAMO_VOWELS + JAMO_TAILS
+    # JAMO_LEADS = ''.join([chr(_) for _ in range(0x1100, 0x1113)])
+    # JAMO_VOWELS = ''.join([chr(_) for _ in range(0x1161, 0x1176)])
+    # JAMO_TAILS = ''.join([chr(_) for _ in range(0x11A8, 0x11C3)])
+    # vocab =
+    vocab_size=152
+        # 'PE !,.?' + JAMO_LEADS + JAMO_VOWELS + JAMO_TAILS
 
     ref_path = "unseen" # seen or unseen

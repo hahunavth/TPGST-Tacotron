@@ -8,6 +8,7 @@ import utils
 import codecs, unicodedata
 from config import ConfigArgs as args
 from text import _id_to_symbol, _symbol_to_id
+import torch.nn.functional as F
 
 
 class VLSPSpeechDataset(Dataset):
@@ -49,8 +50,14 @@ class VLSPSpeechDataset(Dataset):
             mel = torch.tensor(np.load(self.fpaths[idx]))
         else:
             mel = self.mels[idx]
+        if mel.shape[0] % args.r != 0:
+            t = mel.shape[0]
+            n_paddings = args.r - (t % args.r) if t % args.r != 0 else 0  # for reduction
+            mel = np.reshape(np.pad(mel, [[0, n_paddings], [0, 0]], mode="constant"), [-1, args.n_mels * args.r])
+            mel = torch.Tensor(mel)
         # print(mel.shape)
-        mel = mel.view(-1, args.n_mels * args.r)
+        # mel = mel.view(-1, args.n_mels * args.r)
+        mel = mel.reshape(-1, args.n_mels * args.r)
         return text, mel
 
     def __len__(self):

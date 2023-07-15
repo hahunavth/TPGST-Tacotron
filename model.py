@@ -12,7 +12,8 @@ class TPGST(nn.Module):
     def __init__(self):
         super(TPGST, self).__init__()
         self.name = 'TPGST'
-        self.embed = nn.Embedding(len(args.vocab), args.Ce, padding_idx=0)
+        # len(args.vocab)
+        self.embed = nn.Embedding(args.vocab_size, args.Ce, padding_idx=0)
         self.encoder = TextEncoder(hidden_dims=args.Cx) # bidirectional
         self.GST = StyleTokenLayer(embed_size=args.Cx, n_units=args.Cx)
         self.tpnet = TPSENet(text_dims=args.Cx*2, style_dims=args.Cx)
