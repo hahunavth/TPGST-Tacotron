@@ -49,9 +49,11 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
 
     GO_frames = torch.zeros([batch_size, 1, args.n_mels * args.r]).to(DEVICE)  # (N, Ty/r, n_mels)
     idx2char = load_vocab()[-1]
+    print("Start training...")
     while global_step < args.max_step:
         epoch_loss_mel, epoch_loss_fmel, epoch_loss_ff = 0., 0., 0.
         for step, (texts, mels, ff) in tqdm(enumerate(data_loader), total=len(data_loader), unit='B', ncols=70,
+                                            disable=True,
                                             leave=False):
             optimizer.zero_grad()
             texts, mels, ff = texts.to(DEVICE), mels.to(DEVICE), ff.to(DEVICE)
@@ -128,6 +130,8 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
                 writer.add_image('train/styleA', styleA, global_step)
             # print('Training Loss: {}'.format(avg_loss))
         epochs += 1
+        print(f"Epoch {epochs} - Step {global_step}: epoch_loss_mel={epoch_loss_mel} epoch_loss_fmel={epoch_loss_fmel} epoch_loss_ff={epoch_loss_ff}")
+
     print('Training complete')
 
 
