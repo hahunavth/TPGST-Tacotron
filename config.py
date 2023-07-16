@@ -6,8 +6,8 @@ class ConfigArgs:
 
     """
     data_path = './data/processed_vlsp_data_phoneme_level' # DEFAULT '../../data/kss'
-    mel_dir, mag_dir = 'mels', 'mags'
-    meta = "train.txt" # 'transcript.v.1.4.txt' # DEFAULT 'transcript.v.1.3.txt'
+    mel_dir, mag_dir = 'k_format_mels_tuyen_dv', 'mags' # 'mels', 'mags'
+    meta = "meta_data.csv" # "train.txt" # 'transcript.v.1.4.txt' # DEFAULT 'transcript.v.1.3.txt'
     testset = './data/processed_vlsp_data_phoneme_level/val.txt'
     logdir = 'logs' # log directory
     sampledir = 'samples' # directory where samples are located
@@ -31,7 +31,7 @@ class ConfigArgs:
 
     batch_size = 32 # for training
     test_batch = 16 # for test
-    max_step = 1000 # 400000 # maximum training step
+    max_step = 10000 # 400000 # maximum training step
     lr = 0.001 # learning rate
     warm_up_steps = 4000.0 # warm up learning rate
     # lr_decay_step = 50000 # actually not decayed per this step

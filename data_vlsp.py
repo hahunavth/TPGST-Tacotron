@@ -11,7 +11,7 @@ from text import _id_to_symbol, _symbol_to_id
 import torch.nn.functional as F
 
 
-def mel_processing(mel):
+def mel_k_format_transform(mel):
     """
     Convert vlsp data into default korea data format
 
@@ -29,7 +29,7 @@ def mel_processing(mel):
     return mel
 
 
-def revert_mel_processing(mel):
+def revert_mel_k_format_transfrom(mel):
     """
     Revert mel processing
     """
@@ -67,7 +67,8 @@ class VLSPSpeechDataset(Dataset):
         for fpath, text in zip(meta.id.values, meta.phoneme.values):
             text = text.lstrip("{").rstrip("}").split(" ")
             t = np.array([_symbol_to_id[ch] for ch in text])
-            f = os.path.join(data_path, args.mel_dir, f"mel-{os.path.basename(fpath).replace('wav', 'npy')}")
+            # f = os.path.join(data_path, args.mel_dir, f"mel-{os.path.basename(fpath).replace('wav', 'npy')}")
+            f = os.path.join(data_path, args.mel_dir, f"{os.path.basename(fpath).replace('wav', 'npy')}")
             self.texts.append(t)
             self.fpaths.append(f"{f}.npy")
         if self.mem_mode:
@@ -82,20 +83,22 @@ class VLSPSpeechDataset(Dataset):
             mel = torch.tensor(np.load(self.fpaths[idx]))
         else:
             mel = self.mels[idx]
-        if mel.shape[0] % args.r != 0:
-            t = mel.shape[0]
-            n_paddings = args.r - (t % args.r) if t % args.r != 0 else 0  # for reduction
-            mel = np.reshape(np.pad(mel, [[0, n_paddings], [0, 0]], mode="constant"), [-1, args.n_mels * args.r])
-            mel = torch.Tensor(mel)
-            # t = mel.shape[0]
-            # n_paddings = args.r - (t % args.r) if t % args.r != 0 else 0  # for reduction
-            # mel = mel.reshape(mel.shape[0], -1)
-            # mel = torch.nn.functional.pad(mel, (0, n_paddings, 0, 0), mode="constant")  # Pad the tensor
-        # print(mel.shape)
-        # mel = mel.view(-1, args.n_mels * args.r)
-        mel = mel.reshape(-1, args.n_mels * args.r)
+        # default
+        mel = mel.view(-1, args.n_mels * args.r)
+        # trans
+        # if mel.shape[0] % args.r != 0:
+        #     t = mel.shape[0]
+        #     n_paddings = args.r - (t % args.r) if t % args.r != 0 else 0  # for reduction
+        #     mel = np.reshape(np.pad(mel, [[0, n_paddings], [0, 0]], mode="constant"), [-1, args.n_mels * args.r])
+        #     mel = torch.Tensor(mel)
+        #     # t = mel.shape[0]
+        #     # n_paddings = args.r - (t % args.r) if t % args.r != 0 else 0  # for reduction
+        #     # mel = mel.reshape(mel.shape[0], -1)
+        #     # mel = torch.nn.functional.pad(mel, (0, n_paddings, 0, 0), mode="constant")  # Pad the tensor
+        # # print(mel.shape)
+        # mel = mel.reshape(-1, args.n_mels * args.r)
 
-        mel = mel_processing(mel)
+        # mel = mel_processing(mel)
         # print(mel.shape)
 
         return text, mel
