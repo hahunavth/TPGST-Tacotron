@@ -1,24 +1,20 @@
-from config import ConfigArgs as args
-import os, sys
-import random
+import os
 import torch
-import torch.nn as nn
 import torch.nn.parallel
-import torch.backends.cudnn as cudnn
 import torch.optim
 from torch.utils.data import DataLoader
-from tqdm import tqdm, trange
 
 import numpy as np
 import pandas as pd
-from model import TPGST
-# from data import TextDataset, text_collate_fn, load_vocab, SpeechDataset, collate_fn
-from data_vlsp import VLSPSpeechDataset, text_collate_fn, load_vocab,VLSPTextDataset, collate_fn
-import utils
 import glob
-from scipy.io.wavfile import write
+
+from model import TPGST
+from data_vlsp import text_collate_fn, load_vocab, VLSPTextDataset
+from config import ConfigArgs as args
+
 
 DEVICE = None
+
 
 def synthesize(model, data_loader, batch_size=100):
     """
