@@ -7,3 +7,6 @@ tools/
 tmp/
 data/
 .idea/
+tmpdir_vocoder/
+A-1.png
+example_TTS.wav

@@ -8,7 +8,7 @@ class ConfigArgs:
     data_path = './data/processed_vlsp_data_phoneme_level' # DEFAULT '../../data/kss'
     mel_dir, mag_dir = 'mels', 'mags'
     meta = "train.txt" # 'transcript.v.1.4.txt' # DEFAULT 'transcript.v.1.3.txt'
-    testset = 'test.txt'
+    testset = './data/processed_vlsp_data_phoneme_level/val.txt'
     logdir = 'logs' # log directory
     sampledir = 'samples' # directory where samples are located
     mem_mode = False # load all of the mel spectrograms into memory
