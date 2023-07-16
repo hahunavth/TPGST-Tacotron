@@ -60,8 +60,12 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
             prev_mels = torch.cat((GO_frames, mels[:, :-1, :]), 1)
             refs = mels.view(mels.size(0), -1, args.n_mels).unsqueeze(1)  # (N, 1, Ty, n_mels)
             if type(model).__name__ == 'TPGST':
-                mels_hat, fmels_hat, A, style_attentions, ff_hat, se, tpse = model(texts, prev_mels, refs)
-                loss_se = criterion(tpse, se.detach())
+                if model.type == "TPSE":
+                    mels_hat, fmels_hat, A, style_attentions, ff_hat, se, tpse = model(texts, prev_mels, refs)
+                    loss_tp__ = criterion(tpse, se.detach())
+                else:  # TPCW
+                    mels_hat, fmels_hat, A, style_attentions, ff_hat, se, tpcw = model(texts, prev_mels, refs)
+                    loss_tp__ = criterion(tpcw, style_attentions.detach())
             else:
                 mels_hat, fmels_hat, A, ff_hat = model(texts, prev_mels)
 
@@ -71,7 +75,7 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
             loss_ff = bce_loss(ff_hat, ff)
 
             if global_step > args.tp_start and type(model).__name__ == 'TPGST':
-                loss = loss_mel + 0.01 * loss_ff + 0.01 * loss_se
+                loss = loss_mel + 0.01 * loss_ff + 0.01 * loss_tp__
             else:
                 loss = loss_mel + 0.01 * loss_ff
 
@@ -87,7 +91,10 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
             if global_step % args.log_term == 0:
                 writer.add_scalar('batch/loss_mel', loss_mel.item(), global_step)
                 if type(model).__name__ == 'TPGST':
-                    writer.add_scalar('batch/loss_se', loss_se.item(), global_step)
+                    if model.type == "TPSE":
+                        writer.add_scalar('batch/loss_se', loss_tp__.item(), global_step)
+                    else:  # tpcw
+                        writer.add_scalar('batch/loss_cw', loss_tp__.item(), global_step)
                 writer.add_scalar('batch/loss_ff', loss_ff.item(), global_step)
                 writer.add_scalar('train/lr', scheduler.get_lr()[0], global_step)
 
@@ -149,7 +156,7 @@ def evaluate(model, data_loader, criterion, writer, global_step, DEVICE=None):
     """
     bce_loss = nn.BCELoss()
     xe_loss = nn.CrossEntropyLoss()
-    valid_loss_mel, valid_loss_fmel, valid_loss_ff, valid_loss_se = 0., 0., 0., 0.
+    valid_loss_mel, valid_loss_fmel, valid_loss_ff, valid_loss_tp__ = 0., 0., 0., 0.
     A = None
     with torch.no_grad():
         for step, (texts, mels, ff) in enumerate(data_loader):
@@ -158,9 +165,15 @@ def evaluate(model, data_loader, criterion, writer, global_step, DEVICE=None):
             prev_mels = torch.cat((GO_frames, mels[:, :-1, :]), 1)
             refs = mels.view(mels.size(0), -1, args.n_mels).unsqueeze(1)  # (N, 1, Ty, n_mels)
             if type(model).__name__ == 'TPGST':
-                mels_hat, fmels_hat, A, style_attentions, ff_hat, se, tpse = model(texts, prev_mels, refs)
-                loss_se = criterion(tpse, se)
-                valid_loss_se += loss_se.item()
+                # mels_hat, fmels_hat, A, style_attentions, ff_hat, se, tpse = model(texts, prev_mels, refs)
+                # loss_se = criterion(tpse, se)
+                if model.type == "TPSE":
+                    mels_hat, fmels_hat, A, style_attentions, ff_hat, se, tpse = model(texts, prev_mels, refs)
+                    loss_tp__ = criterion(tpse, se.detach())
+                else:  # TPCW
+                    mels_hat, fmels_hat, A, style_attentions, ff_hat, se, tpcw = model(texts, prev_mels, refs)
+                    loss_tp__ = criterion(tpcw, style_attentions.detach())
+                valid_loss_tp__ += loss_tp__.item()
             else:
                 mels_hat, fmels_hat, A, ff_hat = model(texts, prev_mels)
 
@@ -194,8 +207,11 @@ def evaluate(model, data_loader, criterion, writer, global_step, DEVICE=None):
         writer.add_image('eval/fmel_hat', fmel_hat, global_step)
         writer.add_image('eval/mel', mel, global_step)
         if type(model).__name__ == 'TPGST':
-            avg_loss_se = valid_loss_se / (len(data_loader))
-            writer.add_scalar('eval/loss_se', avg_loss_se, global_step)
+            avg_loss_tp__ = valid_loss_tp__ / (len(data_loader))
+            writer.add_scalar(
+                'eval/loss_se' if model.type == "TPSE" else 'eval/loss_cw',
+                avg_loss_tp__, global_step
+            )
             styleA = style_attentions.view(1, mels.size(0), args.n_tokens) * 255.
             writer.add_image('eval/styleA', styleA, global_step)
 
@@ -230,14 +246,14 @@ def save_model(model, optimizer, scheduler, val_loss, global_step, ckpt_dir):
     torch.save(state, os.path.join(ckpt_dir, cur_ckpt))
 
 
-def main(DEVICE):
+def main(DEVICE, model_type):
     """
     main function
 
     :param DEVICE: 'cpu' or 'gpu'
 
     """
-    model = TPGST().to(DEVICE)
+    model = TPGST(type=model_type).to(DEVICE)
 
     print('Model {} is working...'.format(type(model).__name__))
     ckpt_dir = os.path.join(args.logdir, type(model).__name__)
@@ -292,6 +308,10 @@ if __name__ == '__main__':
         "--seed",
         default=999
     )
+    parser.add_argument(
+        "--model_type",
+        default="TPSE"
+    )
     _args = parser.parse_args()
 
     if _args.device=="cuda":
@@ -304,4 +324,4 @@ if __name__ == '__main__':
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    main(DEVICE)
+    main(DEVICE, _args.model_type)

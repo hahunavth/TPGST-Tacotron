@@ -9,16 +9,21 @@ class TPGST(nn.Module):
     GST-Tacotron
    
     """
-    def __init__(self):
+    def __init__(self, type="TPSE"):
         super(TPGST, self).__init__()
+        assert type in ["TPSE", "TPCW"]
         self.name = 'TPGST'
+        self.type = type
         # len(args.vocab)
         self.embed = nn.Embedding(args.vocab_size, args.Ce, padding_idx=0)
         self.encoder = TextEncoder(hidden_dims=args.Cx) # bidirectional
         self.GST = StyleTokenLayer(embed_size=args.Cx, n_units=args.Cx)
-        self.tpnet = TPSENet(text_dims=args.Cx*2, style_dims=args.Cx)
-        self.decoder = AudioDecoder(enc_dim=args.Cx*3, dec_dim=args.Cx)
-    
+        if self.type == "TPSE":
+            self.tpnet = TPSENet(text_dims=args.Cx*2, style_dims=args.Cx)
+        else:
+            self.tpnet = TPCWNET(text_dims=args.Cx*2, n_tokens=args.n_tokens)
+        self.decoder = AudioDecoder(enc_dim=args.Cx*3, dec_dim=args.Cx) #
+
     def forward(self, texts, prev_mels, refs=None, synth=False, ref_mode=True):
         """
         :param texts: (N, Tx) Tensor containing texts
@@ -37,16 +42,67 @@ class TPGST(nn.Module):
         """
         x = self.embed(texts)  # (N, Tx, Ce)
         text_emb, enc_hidden = self.encoder(x) # (N, Tx, Cx*2)
-        tp_style_emb = self.tpnet(text_emb)
-        if synth:
-            style_emb, style_attentions = tp_style_emb, None
-        else:
-            style_emb, style_attentions = self.GST(refs, ref_mode=ref_mode) # (N, 1, E), (N, n_tokens)
-        
-        tiled_style_emb = style_emb.expand(-1, text_emb.size(1), -1) # (N, Tx, E)
-        memory = torch.cat([text_emb, tiled_style_emb], dim=-1)  # (N, Tx, Cx*2+E)
-        mels_hat, mags_hat, attentions, ff_hat = self.decoder(prev_mels, memory, synth=synth)
-        return mels_hat, mags_hat, attentions, style_attentions, ff_hat, style_emb, tp_style_emb
+
+        if self.type == "TPSE":
+            tp_style_emb = self.tpnet(text_emb)
+            if synth:
+                style_emb, style_attentions = tp_style_emb, None
+            else:
+                style_emb, style_attentions = self.GST(refs, ref_mode=ref_mode)  # (N, 1, E), (N, n_tokens)
+            tiled_style_emb = style_emb.expand(-1, text_emb.size(1), -1)  # (N, Tx, E)
+            memory = torch.cat([text_emb, tiled_style_emb], dim=-1)  # (N, Tx, Cx*2+E)
+            mels_hat, mags_hat, attentions, ff_hat = self.decoder(prev_mels, memory, synth=synth)
+            return mels_hat, mags_hat, attentions, style_attentions, ff_hat, style_emb, tp_style_emb
+
+        else:  # TPCW
+            tp_cb_weight = self.tpnet(text_emb)
+            if synth:
+                style_emb = torch.sum(tp_cb_weight.unsqueeze(-1) * text_emb, dim=1, keepdim=True)  # (N, 1, E)
+                style_emb = torch.tanh(style_emb)
+                style_attentions = None
+                # style_emb, style_attentions = None, None
+            else:
+                style_emb, style_attentions = self.GST(refs, ref_mode=ref_mode)  # (N, 1, E), (N, n_tokens)
+            tiled_style_emb = style_emb.expand(-1, text_emb.size(1), -1)  # (N, Tx, E)
+            memory = torch.cat([text_emb, tiled_style_emb], dim=-1)  # (N, Tx, Cx*2+E)
+            mels_hat, mags_hat, attentions, ff_hat = self.decoder(prev_mels, memory, synth=synth)
+            return mels_hat, mags_hat, attentions, style_attentions, ff_hat, style_emb, tp_cb_weight
+
+
+
+class TPCWNET(nn.Module):
+    """
+    interpolating the GSTs learned during training, using
+    combination weights predicted only from the text
+    (“TPCW”);
+    """
+    def __init__(self, text_dims, n_tokens):
+        super(TPCWNET, self).__init__()
+        self.text_dims = text_dims
+        self.n_tokens = n_tokens
+        self.conv = nn.Sequential(
+            mm.Conv1d(text_dims, n_tokens, 3, activation_fn=torch.relu, bn=True, bias=False),
+        )
+        self.gru = nn.GRU(n_tokens, n_tokens, batch_first=True, bidirectional=True)
+        self.fc = nn.Linear(n_tokens*2, n_tokens)
+
+    def forward(self, text_embedding):
+        """
+        :param text_embedding: (N, Tx, E)
+
+        Returns:
+            :A: (N, n_tokens) Tensor. Combination weight.
+        """
+        te = text_embedding.transpose(1, 2) # (N, E, Tx)
+        h = self.conv(te)
+        h = h.transpose(1, 2) # (N, Tx, C)
+        out, _ = self.gru(h)
+        A = self.fc(out[:, -1:, :])
+        A = torch.softmax(A, dim=-1)  # (N, 1, N_tokens)
+        A = A.squeeze(dim=1)  # (N, n_tokens)
+        # A = torch.tanh(A)
+        return A
+
 
 class TPSENet(nn.Module):
     """
@@ -77,4 +133,3 @@ class TPSENet(nn.Module):
         se = self.fc(out[:, -1:, :])
         se = torch.tanh(se)
         return se
-
