@@ -264,7 +264,9 @@ def main(DEVICE):
     validset = VLSPSpeechDataset(args.data_path, args.meta, mem_mode=args.mem_mode, training=False)
     data_loader = DataLoader(dataset=dataset, batch_size=args.batch_size,
                              shuffle=True, collate_fn=collate_fn,
-                             drop_last=True, pin_memory=True, num_workers=args.n_workers)
+                             drop_last=True, pin_memory=True,
+                             num_workers=args.n_workers
+    )
     valid_loader = DataLoader(dataset=validset, batch_size=args.test_batch,
                               shuffle=False, collate_fn=collate_fn, pin_memory=True)
     # torch.set_num_threads(4)

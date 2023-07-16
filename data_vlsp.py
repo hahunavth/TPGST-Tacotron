@@ -11,6 +11,38 @@ from text import _id_to_symbol, _symbol_to_id
 import torch.nn.functional as F
 
 
+def mel_processing(mel):
+    """
+    Convert vlsp data into default korea data format
+
+    Arguments
+    ---------
+    mel : torch.Tensor
+        Mel-spectrogram, size (T, n_mels).
+
+    """
+    # Perform mel spectrogram processing
+    mel = torch.log(torch.clamp(mel, min=1e-5, max=1e+5))
+    maxval, minval = 3.0, torch.log(torch.tensor(1e-5))
+    mel = (mel - minval) / (maxval - minval)
+    # mel = mel.transpose(0, 1).float()  # (n_mels, T)
+    return mel
+
+
+def revert_mel_processing(mel):
+    """
+    Revert mel processing
+    """
+    # Transpose back
+    # mel = mel.transpose(0, 1)
+    # Inverse normalization
+    maxval, minval = 3.0, torch.log(torch.tensor(1e-5))
+    mel = mel * (maxval - minval) + minval
+    # Exponentiation
+    mel = torch.exp(mel)
+    return mel
+
+
 class VLSPSpeechDataset(Dataset):
     """
     Basic Speech Dataset
@@ -55,9 +87,17 @@ class VLSPSpeechDataset(Dataset):
             n_paddings = args.r - (t % args.r) if t % args.r != 0 else 0  # for reduction
             mel = np.reshape(np.pad(mel, [[0, n_paddings], [0, 0]], mode="constant"), [-1, args.n_mels * args.r])
             mel = torch.Tensor(mel)
+            # t = mel.shape[0]
+            # n_paddings = args.r - (t % args.r) if t % args.r != 0 else 0  # for reduction
+            # mel = mel.reshape(mel.shape[0], -1)
+            # mel = torch.nn.functional.pad(mel, (0, n_paddings, 0, 0), mode="constant")  # Pad the tensor
         # print(mel.shape)
         # mel = mel.view(-1, args.n_mels * args.r)
         mel = mel.reshape(-1, args.n_mels * args.r)
+
+        mel = mel_processing(mel)
+        # print(mel.shape)
+
         return text, mel
 
     def __len__(self):
