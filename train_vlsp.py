@@ -65,7 +65,7 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
                     loss_tp__ = criterion(tpse, se.detach())
                 else:  # TPCW
                     mels_hat, fmels_hat, A, style_attentions, ff_hat, se, tpcw = model(texts, prev_mels, refs)
-                    loss_tp__ = criterion(tpcw, style_attentions.detach())
+                    loss_tp__ = xe_loss(tpcw, style_attentions.detach())
             else:
                 mels_hat, fmels_hat, A, ff_hat = model(texts, prev_mels)
 

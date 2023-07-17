@@ -20,7 +20,7 @@ class TPGST(nn.Module):
         self.GST = StyleTokenLayer(embed_size=args.Cx, n_units=args.Cx)
         if self.type == "TPSE":
             self.tpnet = TPSENet(text_dims=args.Cx*2, style_dims=args.Cx)
-        else:
+        else:  # TPCW
             self.tpnet = TPCWNET(text_dims=args.Cx*2, n_tokens=args.n_tokens)
         self.decoder = AudioDecoder(enc_dim=args.Cx*3, dec_dim=args.Cx) #
 
@@ -41,7 +41,7 @@ class TPGST(nn.Module):
             :style_emb: (N, 1, E) Tensor. Style embedding
         """
         x = self.embed(texts)  # (N, Tx, Ce)
-        text_emb, enc_hidden = self.encoder(x) # (N, Tx, Cx*2)
+        text_emb, enc_hidden = self.encoder(x)  # (N, Tx, Cx*2)
 
         if self.type == "TPSE":
             tp_style_emb = self.tpnet(text_emb)
@@ -55,19 +55,18 @@ class TPGST(nn.Module):
             return mels_hat, mags_hat, attentions, style_attentions, ff_hat, style_emb, tp_style_emb
 
         else:  # TPCW
-            tp_cb_weight = self.tpnet(text_emb)
+            tp_cb_weight = self.tpnet(text_emb)  # (N, n_tokens)
             if synth:
-                style_emb = torch.sum(tp_cb_weight.unsqueeze(-1) * text_emb, dim=1, keepdim=True)  # (N, 1, E)
-                style_emb = torch.tanh(style_emb)
+                token_embedding = self.GST.token_embedding  # (n_tokens, E)
+                style_emb = torch.mm(tp_cb_weight, token_embedding)
+                style_emb = style_emb.unsqueeze(1)  # (N, 1, E)
                 style_attentions = None
-                # style_emb, style_attentions = None, None
             else:
                 style_emb, style_attentions = self.GST(refs, ref_mode=ref_mode)  # (N, 1, E), (N, n_tokens)
             tiled_style_emb = style_emb.expand(-1, text_emb.size(1), -1)  # (N, Tx, E)
             memory = torch.cat([text_emb, tiled_style_emb], dim=-1)  # (N, Tx, Cx*2+E)
             mels_hat, mags_hat, attentions, ff_hat = self.decoder(prev_mels, memory, synth=synth)
             return mels_hat, mags_hat, attentions, style_attentions, ff_hat, style_emb, tp_cb_weight
-
 
 
 class TPCWNET(nn.Module):
@@ -93,14 +92,14 @@ class TPCWNET(nn.Module):
         Returns:
             :A: (N, n_tokens) Tensor. Combination weight.
         """
-        te = text_embedding.transpose(1, 2) # (N, E, Tx)
+        te = text_embedding.transpose(1, 2)  # (N, E, Tx)
         h = self.conv(te)
-        h = h.transpose(1, 2) # (N, Tx, C)
+        h = h.transpose(1, 2)  # (N, Tx, C)
         out, _ = self.gru(h)
-        A = self.fc(out[:, -1:, :])
-        A = torch.softmax(A, dim=-1)  # (N, 1, N_tokens)
+        A = self.fc(out[:, -1:, :])  # Last timestamp output
+        # A = torch.softmax(A, dim=-1)  # (N, 1, N_tokens)
+        A = torch.tanh(A)
         A = A.squeeze(dim=1)  # (N, n_tokens)
-        # A = torch.tanh(A)
         return A
 
 

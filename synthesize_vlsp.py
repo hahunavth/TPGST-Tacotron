@@ -112,7 +112,7 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         "--model_type",
-        default="TPSE" # TPCW
+        default="TPCW" # TPCW
     )
     _args = parser.parse_args()
 
