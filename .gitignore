@@ -10,3 +10,4 @@ data/
 tmpdir_vocoder/
 A-1.png
 example_TTS.wav
+pretrained/

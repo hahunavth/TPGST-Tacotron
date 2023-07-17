@@ -43,7 +43,7 @@ def synthesize(model, data_loader, batch_size=100):
                 # utils.plot_att(alignments[idx], text, args.global_step, path=os.path.join(args.sampledir, 'A'), name='{:03d}.png'.format(idx+step*batch_size+1))
     return None
 
-def main(load_model='latest', synth_mode='synthesize'):
+def main(load_model='latest', synth_mode='synthesize', model_type="TPSE"):
     """
     main function
 
@@ -53,7 +53,7 @@ def main(load_model='latest', synth_mode='synthesize'):
     """
     assert os.path.exists(args.testset), f'Test sentence path is wrong: {args.testset}'
 
-    model = TPGST().to(DEVICE)
+    model = TPGST(model_type).to(DEVICE)
 
     testset = VLSPTextDataset(args.testset)
 
@@ -110,6 +110,10 @@ if __name__ == '__main__':
         "--synth_mode",
         default="synthesize"
     )
+    parser.add_argument(
+        "--model_type",
+        default="TPSE" # TPCW
+    )
     _args = parser.parse_args()
 
     if _args.device=="cuda":
@@ -127,4 +131,4 @@ if __name__ == '__main__':
     # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     # os.environ["CUDA_VISIBLE_DEVICES"] = "{}".format(gpu_id)
     # DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    main(load_model=load_model, synth_mode=synth_mode)
+    main(load_model=load_model, synth_mode=synth_mode, model_type=_args.model_type)
