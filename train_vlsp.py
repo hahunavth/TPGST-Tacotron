@@ -65,7 +65,10 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
                     loss_tp__ = criterion(tpse, se.detach())
                 else:  # TPCW
                     mels_hat, fmels_hat, A, style_attentions, ff_hat, se, tpcw = model(texts, prev_mels, refs)
-                    loss_tp__ = xe_loss(tpcw, style_attentions.detach())
+                    sa = style_attentions.detach()
+                    if sa.ndim == 1:
+                        sa = sa.unsqueeze(0)  # REVIEW style_attentions dim = 1 if batch size = 1
+                    loss_tp__ = xe_loss(tpcw, sa)
             else:
                 mels_hat, fmels_hat, A, ff_hat = model(texts, prev_mels)
 
@@ -75,7 +78,7 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
             loss_ff = bce_loss(ff_hat, ff)
 
             if global_step > args.tp_start and type(model).__name__ == 'TPGST':
-                loss = loss_mel + 0.01 * loss_ff + 0.01 * loss_tp__
+                loss = loss_mel + 0.01 * loss_ff + 10 * loss_tp__ # 0.01 * loss_tp__
             else:
                 loss = loss_mel + 0.01 * loss_ff
 
@@ -95,8 +98,10 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
                         writer.add_scalar('batch/loss_se', loss_tp__.item(), global_step)
                     else:  # tpcw
                         writer.add_scalar('batch/loss_cw', loss_tp__.item(), global_step)
+                        print(f"batch/cw[{global_step}]: {loss_tp__.item()}")
                 writer.add_scalar('batch/loss_ff', loss_ff.item(), global_step)
-                writer.add_scalar('train/lr', scheduler.get_lr()[0], global_step)
+                # writer.add_scalar('train/lr', scheduler.get_lr()[0], global_step)
+                writer.add_scalar('train/lr', scheduler.get_last_lr()[0], global_step)
 
             if global_step % args.eval_term == 0:
                 model.eval()  #
@@ -104,6 +109,10 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
                 model.train()
 
             if global_step % args.save_term == 0:
+                try:
+                    val_loss
+                except Exception:
+                    val_loss = -1
                 save_model(model, optimizer, scheduler, val_loss, global_step, ckpt_dir)  # save best 5 models
             global_step += 1
 
@@ -137,7 +146,7 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
                 writer.add_image('train/styleA', styleA, global_step)
             # print('Training Loss: {}'.format(avg_loss))
         epochs += 1
-        print(f"Epoch {epochs} - Step {global_step}: epoch_loss_mel={epoch_loss_mel} epoch_loss_fmel={epoch_loss_fmel} epoch_loss_ff={epoch_loss_ff}")
+        # print(f"Epoch {epochs} - Step {global_step}: epoch_loss_mel={epoch_loss_mel} epoch_loss_fmel={epoch_loss_fmel} epoch_loss_ff={epoch_loss_ff}")
 
     print('Training complete')
 
@@ -172,7 +181,10 @@ def evaluate(model, data_loader, criterion, writer, global_step, DEVICE=None):
                     loss_tp__ = criterion(tpse, se.detach())
                 else:  # TPCW
                     mels_hat, fmels_hat, A, style_attentions, ff_hat, se, tpcw = model(texts, prev_mels, refs)
-                    loss_tp__ = criterion(tpcw, style_attentions.detach())
+                    sa = style_attentions.detach()
+                    if sa.ndim == 1:
+                        sa = sa.unsqueeze(0)
+                    loss_tp__ = xe_loss(tpcw, sa)
                 valid_loss_tp__ += loss_tp__.item()
             else:
                 mels_hat, fmels_hat, A, ff_hat = model(texts, prev_mels)
@@ -267,13 +279,14 @@ def main(DEVICE, model_type):
         print('Already exists. Retrain the model.')
         try:
             model_path = sorted(glob.glob(os.path.join(ckpt_dir, 'model-*.tar')))[-1]  # latest model
-            state = torch.load(model_path)
+            state = torch.load(model_path, map_location=DEVICE)
             model.load_state_dict(state['model'])
             args.global_step = state['global_step']
             optimizer.load_state_dict(state['optimizer'])
             scheduler.last_epoch = state['scheduler']['last_epoch']
             scheduler.base_lrs = state['scheduler']['base_lrs']
-        except Exception:
+        except Exception as e:
+            print(e)
             print("Model file not exists. Train from start")
 
     dataset = VLSPSpeechDataset(args.data_path, args.meta, mem_mode=args.mem_mode, training=True)
@@ -281,7 +294,7 @@ def main(DEVICE, model_type):
     data_loader = DataLoader(dataset=dataset, batch_size=args.batch_size,
                              shuffle=True, collate_fn=collate_fn,
                              drop_last=True, pin_memory=True,
-                             num_workers=args.n_workers
+                             # num_workers=args.n_workers
     )
     valid_loader = DataLoader(dataset=validset, batch_size=args.test_batch,
                               shuffle=False, collate_fn=collate_fn, pin_memory=True)

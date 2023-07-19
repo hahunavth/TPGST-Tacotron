@@ -7,7 +7,7 @@ import module as mm
 class TPGST(nn.Module):
     """
     GST-Tacotron
-   
+
     """
     def __init__(self, type="TPSE"):
         super(TPGST, self).__init__()
@@ -58,6 +58,9 @@ class TPGST(nn.Module):
             tp_cb_weight = self.tpnet(text_emb)  # (N, n_tokens)
             if synth:
                 token_embedding = self.GST.token_embedding  # (n_tokens, E)
+                # NOTE: infer: add softmax;
+                #       train: use cross-entropy loss that already includes softmax
+                tp_cb_weight = torch.softmax(tp_cb_weight, dim=-1)
                 style_emb = torch.mm(tp_cb_weight, token_embedding)
                 style_emb = style_emb.unsqueeze(1)  # (N, 1, E)
                 style_attentions = None
@@ -97,9 +100,9 @@ class TPCWNET(nn.Module):
         h = h.transpose(1, 2)  # (N, Tx, C)
         out, _ = self.gru(h)
         A = self.fc(out[:, -1:, :])  # Last timestamp output
-        # A = torch.softmax(A, dim=-1)  # (N, 1, N_tokens)
-        A = torch.tanh(A)
         A = A.squeeze(dim=1)  # (N, n_tokens)
+        # if not synth:
+        #     A = torch.softmax(A, dim=-1)
         return A
 
 
