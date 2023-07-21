@@ -101,6 +101,8 @@ class TPCWNET(nn.Module):
         out, _ = self.gru(h)
         A = self.fc(out[:, -1:, :])  # Last timestamp output
         A = A.squeeze(dim=1)  # (N, n_tokens)
+        A = torch.nn.functional.relu(A)
+        A = torch.log(A + 1e-7)
         # if not synth:
         #     A = torch.softmax(A, dim=-1)
         return A

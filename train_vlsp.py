@@ -46,6 +46,7 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
     criterion = nn.L1Loss()  # default average
     bce_loss = nn.BCELoss()
     xe_loss = nn.CrossEntropyLoss()
+    scaler = torch.cuda.amp.GradScaler()
 
     GO_frames = torch.zeros([batch_size, 1, args.n_mels * args.r]).to(DEVICE)  # (N, Ty/r, n_mels)
     idx2char = load_vocab()[-1]
@@ -68,7 +69,8 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
                     sa = style_attentions.detach()
                     if sa.ndim == 1:
                         sa = sa.unsqueeze(0)  # REVIEW style_attentions dim = 1 if batch size = 1
-                    loss_tp__ = xe_loss(tpcw, sa)
+                    loss_tp__ = xe_loss(tpcw, sa)  # Same size (N, n_tokens)
+                    # loss_tp__ = xe_loss(tpcw.view(-1), sa.view(-1))  # Same size (N, n_tokens)
             else:
                 mels_hat, fmels_hat, A, ff_hat = model(texts, prev_mels)
 
@@ -78,9 +80,21 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
             loss_ff = bce_loss(ff_hat, ff)
 
             if global_step > args.tp_start and type(model).__name__ == 'TPGST':
-                loss = loss_mel + 0.01 * loss_ff + 10 * loss_tp__ # 0.01 * loss_tp__
+                loss = loss_mel + 0.01 * loss_ff + 0.01 * loss_tp__
+                # loss = loss_tp__
             else:
                 loss = loss_mel + 0.01 * loss_ff
+
+            # scaler.scale(loss).backward()
+            # # Unscales the gradients of optimizer's assigned params in-place
+            # scaler.unscale_(optimizer)
+            # # Since the gradients of optimizer's assigned params are unscaled, clips as usual:
+            # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
+            # # optimizer's gradients are already unscaled, so scaler.step does not unscale them,
+            # # although it still skips optimizer.step() if the gradients contain infs or NaNs.
+            # scaler.step(optimizer)
+            # # Updates the scale for next iteration.
+            # scaler.update()
 
             loss.backward()
             # nn.utils.clip_grad_norm_(model.parameters(), 0.1)
@@ -101,7 +115,7 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
                         print(f"batch/cw[{global_step}]: {loss_tp__.item()}")
                 writer.add_scalar('batch/loss_ff', loss_ff.item(), global_step)
                 # writer.add_scalar('train/lr', scheduler.get_lr()[0], global_step)
-                writer.add_scalar('train/lr', scheduler.get_last_lr()[0], global_step)
+                writer.add_scalar('train/lr', scheduler.get_last_lr(), global_step)
 
             if global_step % args.eval_term == 0:
                 model.eval()  #
@@ -125,7 +139,8 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
             writer.add_scalar('train/loss_mel', avg_loss_mel, global_step)
             writer.add_scalar('train/loss_fmel', avg_loss_fmel, global_step)
             writer.add_scalar('train/loss_ff', avg_loss_ff, global_step)
-            writer.add_scalar('train/lr', scheduler.get_lr()[0], global_step)
+            # writer.add_scalar('train/lr', scheduler.get_lr()[0], global_step)
+            writer.add_scalar('train/lr', scheduler.get_last_lr(), global_step)
 
             alignment = A[0:1].clone().cpu().detach().numpy()
             writer.add_image('train/alignments', att2img(alignment), global_step)  # (Tx, Ty)
@@ -146,7 +161,7 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
                 writer.add_image('train/styleA', styleA, global_step)
             # print('Training Loss: {}'.format(avg_loss))
         epochs += 1
-        # print(f"Epoch {epochs} - Step {global_step}: epoch_loss_mel={epoch_loss_mel} epoch_loss_fmel={epoch_loss_fmel} epoch_loss_ff={epoch_loss_ff}")
+        print(f"Epoch {epochs} - Step {global_step}: epoch_loss_mel={epoch_loss_mel} epoch_loss_fmel={epoch_loss_fmel} epoch_loss_ff={epoch_loss_ff}")
 
     print('Training complete')
 
@@ -184,7 +199,8 @@ def evaluate(model, data_loader, criterion, writer, global_step, DEVICE=None):
                     sa = style_attentions.detach()
                     if sa.ndim == 1:
                         sa = sa.unsqueeze(0)
-                    loss_tp__ = xe_loss(tpcw, sa)
+                    # loss_tp__ = xe_loss(tpcw, sa)
+                    loss_tp__ = xe_loss(sa, tpcw)
                 valid_loss_tp__ += loss_tp__.item()
             else:
                 mels_hat, fmels_hat, A, ff_hat = model(texts, prev_mels)
