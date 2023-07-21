@@ -70,8 +70,8 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
                     sa = style_attentions.detach()
                     if sa.ndim == 1:
                         sa = sa.unsqueeze(0)  # REVIEW style_attentions dim = 1 if batch size = 1
-                    # loss_tp__ = xe_loss(tpcw, sa)  # Same size (N, n_tokens)
-                    loss_tp__ = xe_loss(tpcw.view(-1), sa.view(-1))  # Same size (N, n_tokens)
+                    loss_tp__ = xe_loss(tpcw, sa)  # Same size (N, n_tokens)
+                    # loss_tp__ = xe_loss(tpcw.view(-1), sa.view(-1))  # Same size (N, n_tokens)
             else:
                 mels_hat, fmels_hat, A, ff_hat = model(texts, prev_mels)
 

@@ -86,6 +86,7 @@ class TPCWNET(nn.Module):
             mm.Conv1d(text_dims, n_tokens, 3, activation_fn=torch.relu, bn=True, bias=False),
         )
         self.gru = nn.GRU(n_tokens, n_tokens, batch_first=True, bidirectional=True)
+        # self.gru = TimeAggregatingGRU(n_tokens, n_tokens)  # Use TimeAggregatingGRU
         self.fc = nn.Linear(n_tokens*2, n_tokens)
 
     def forward(self, text_embedding):
@@ -99,7 +100,8 @@ class TPCWNET(nn.Module):
         h = self.conv(te)
         h = h.transpose(1, 2)  # (N, Tx, C)
         out, _ = self.gru(h)
-        A = self.fc(out[:, -1:, :])  # Last timestamp output
+        A = self.fc(out.mean(dim=1))  # Time aggregating GRU
+        # A = self.fc(out[:, -1:, :])  # Last timestamp output
         A = A.squeeze(dim=1)  # (N, n_tokens)
         A = torch.nn.functional.relu(A)
         A = torch.log(A + 1e-7)
