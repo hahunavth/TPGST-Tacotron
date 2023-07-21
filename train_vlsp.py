@@ -25,6 +25,7 @@ from utils import att2img, plot_att, lr_policy
 
 # torch.autograd.set_detect_anomaly = True
 
+
 def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32, ckpt_dir=None, writer=None,
           DEVICE=None):
     """
@@ -69,8 +70,8 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
                     sa = style_attentions.detach()
                     if sa.ndim == 1:
                         sa = sa.unsqueeze(0)  # REVIEW style_attentions dim = 1 if batch size = 1
-                    loss_tp__ = xe_loss(tpcw, sa)  # Same size (N, n_tokens)
-                    # loss_tp__ = xe_loss(tpcw.view(-1), sa.view(-1))  # Same size (N, n_tokens)
+                    # loss_tp__ = xe_loss(tpcw, sa)  # Same size (N, n_tokens)
+                    loss_tp__ = xe_loss(tpcw.view(-1), sa.view(-1))  # Same size (N, n_tokens)
             else:
                 mels_hat, fmels_hat, A, ff_hat = model(texts, prev_mels)
 
@@ -189,8 +190,6 @@ def evaluate(model, data_loader, criterion, writer, global_step, DEVICE=None):
             prev_mels = torch.cat((GO_frames, mels[:, :-1, :]), 1)
             refs = mels.view(mels.size(0), -1, args.n_mels).unsqueeze(1)  # (N, 1, Ty, n_mels)
             if type(model).__name__ == 'TPGST':
-                # mels_hat, fmels_hat, A, style_attentions, ff_hat, se, tpse = model(texts, prev_mels, refs)
-                # loss_se = criterion(tpse, se)
                 if model.type == "TPSE":
                     mels_hat, fmels_hat, A, style_attentions, ff_hat, se, tpse = model(texts, prev_mels, refs)
                     loss_tp__ = criterion(tpse, se.detach())
@@ -198,10 +197,10 @@ def evaluate(model, data_loader, criterion, writer, global_step, DEVICE=None):
                     mels_hat, fmels_hat, A, style_attentions, ff_hat, se, tpcw = model(texts, prev_mels, refs)
                     sa = style_attentions.detach()
                     if sa.ndim == 1:
-                        sa = sa.unsqueeze(0)
-                    # loss_tp__ = xe_loss(tpcw, sa)
-                    loss_tp__ = xe_loss(sa, tpcw)
-                valid_loss_tp__ += loss_tp__.item()
+                        sa = sa.unsqueeze(0)  # REVIEW style_attentions dim = 1 if batch size = 1
+                    # loss_tp__ = xe_loss(tpcw, sa)  # Same size (N, n_tokens)
+                    loss_tp__ = xe_loss(tpcw.view(-1), sa.view(-1))  # Same size (N, n_tokens)
+                    valid_loss_tp__ += loss_tp__.item()
             else:
                 mels_hat, fmels_hat, A, ff_hat = model(texts, prev_mels)
 
@@ -213,6 +212,7 @@ def evaluate(model, data_loader, criterion, writer, global_step, DEVICE=None):
             valid_loss_mel += loss_mel.item()
             valid_loss_fmel += loss_fmel.item()
             valid_loss_ff += loss_ff.item()
+
         avg_loss_mel = valid_loss_mel / (len(data_loader))
         avg_loss_fmel = valid_loss_fmel / (len(data_loader))
         avg_loss_ff = valid_loss_ff / (len(data_loader))
