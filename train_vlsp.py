@@ -82,7 +82,7 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
 
             if global_step > args.tp_start and type(model).__name__ == 'TPGST':
                 loss = loss_mel + 0.01 * loss_ff + 0.01 * loss_tp__
-                # loss = loss_tp__
+                loss = loss_mel + 0.2 * loss_ff + 0.2 * loss_tp__
             else:
                 loss = loss_mel + 0.01 * loss_ff
 
@@ -98,7 +98,7 @@ def train(model, data_loader, valid_loader, optimizer, scheduler, batch_size=32,
             # scaler.update()
 
             loss.backward()
-            # nn.utils.clip_grad_norm_(model.parameters(), 0.1)
+            nn.utils.clip_grad_norm_(model.parameters(), 0.1)
             optimizer.step()
             scheduler.step()
 
